@@ -17,7 +17,7 @@ trap 'echo "Interrupted"; exit 130' INT TERM
 
 # ---------- Config (override via env) ----------
 REPO_NAME="${REPO_NAME:-arch-repo}"                          # pacman repo label
-PKG_REPO_URL="${PKG_REPO_URL:-git@github.com:OpenArsenal/Packages.git}"
+PKG_REPO_URL="${PKG_REPO_URL:-https://github.com/OpenArsenal/Packages.git}"
 PKG_REF="${PKG_REF:-main}"                                    # branch/tag/sha
 PKG_SUBPATH="${PKG_SUBPATH:-packages/alpm}"                   # path to PKGBUILDs in Packages/
 OUT_ROOT="${OUT_ROOT:-docs}"                                  # GitHub Pages root
