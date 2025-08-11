@@ -72,16 +72,6 @@ if [[ -v GPG_KEYS && ${#GPG_KEYS[@]} -gt 0 ]]; then
 fi
 
 # ---------- Build all packages ----------
-# Copy README.md from project root to docs for GitHub Pages documentation (before changing dirs)
-PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-if [[ -f "$PROJECT_ROOT/README.md" ]]; then
-  mkdir -p "$OUT_ROOT"  # Ensure docs/ directory exists
-  cp "$PROJECT_ROOT/README.md" "$OUT_ROOT/"
-  echo "📄 Copied README.md from project root to $OUT_ROOT/"
-else
-  echo "ℹ️ No README.md found in project root: $PROJECT_ROOT"
-fi
-
 # Set PKGDEST safely (avoid command substitution in assignment)
 if ! cd "$OUT_DIR"; then
   echo "✖ Failed to access output directory: $OUT_DIR" >&2
