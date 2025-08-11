@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # scripts/build-all.sh — build PKGBUILDs from a separate repo and publish a pacman repo
-# Defaults: CLEAN CHROOT via devtools; outputs to ./docs/$arch; repo label = arch-repo
+# Defaults: HOST BUILD (simple); outputs to ./docs/$arch; repo label = arch-repo
+# Set CLEAN_REPO=0 to keep old package versions alongside new ones
 
 set -Eeuo pipefail
 IFS=$'\n\t'
@@ -21,9 +22,10 @@ PKG_REPO_URL="${PKG_REPO_URL:-https://github.com/OpenArsenal/Packages.git}"
 PKG_REF="${PKG_REF:-main}"                                    # branch/tag/sha
 PKG_SUBPATH="${PKG_SUBPATH:-packages/alpm}"                   # path to PKGBUILDs in Packages/
 OUT_ROOT="${OUT_ROOT:-docs}"                                  # GitHub Pages root
-CHROOT="${CHROOT:-0}"                                         # 1=clean chroot (recommended), 0=host
+CLEAN_REPO="${CLEAN_REPO:-0}"                                # 1=remove old packages, 0=keep all versions
+CHROOT="${CHROOT:-0}"                                         # 0=host (simple), 1=clean chroot (reproducible)
 CHROOT_DIR="${CHROOT_DIR:-/var/lib/archbuild/custom}"         # chroot location (devtools)
-MAKEPKG_OPTS=("--syncdeps" "--clean" "--cleanbuild" "--noconfirm")
+MAKEPKG_OPTS=("--syncdeps" "--clean" "--cleanbuild" "--noconfirm")  # makepkg flags as array
 DB_EXT="${DB_EXT:-zst}"                                       # db compression: zst|xz|gz … (repo-add)
 KEYSERVER="${KEYSERVER:-keyserver.ubuntu.com}"                # for optional GPG key import
 # Optional: Declare GPG_KEYS array before running script:
@@ -31,11 +33,9 @@ KEYSERVER="${KEYSERVER:-keyserver.ubuntu.com}"                # for optional GPG
 
 # ---------- Safety & prereqs ----------
 [[ $EUID -ne 0 ]] || { echo "Do NOT run as root (makepkg)."; exit 1; }
-for c in git repo-add; do command -v "$c" >/dev/null || { echo "Missing $c"; exit 127; }; done
+for c in git repo-add makepkg; do command -v "$c" >/dev/null || { echo "Missing $c"; exit 127; }; done
 if [[ "$CHROOT" == "1" ]]; then
   for c in makechrootpkg mkarchroot; do command -v "$c" >/dev/null || { echo "Missing $c (pacman -S devtools)"; exit 127; }; done
-else
-  command -v makepkg >/dev/null || { echo "Missing makepkg (pacman)."; exit 127; }
 fi
 
 # Detect arch for output directory
@@ -72,6 +72,16 @@ if [[ -v GPG_KEYS && ${#GPG_KEYS[@]} -gt 0 ]]; then
 fi
 
 # ---------- Build all packages ----------
+# Copy README.md from project root to docs for GitHub Pages documentation (before changing dirs)
+PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+if [[ -f "$PROJECT_ROOT/README.md" ]]; then
+  mkdir -p "$OUT_ROOT"  # Ensure docs/ directory exists
+  cp "$PROJECT_ROOT/README.md" "$OUT_ROOT/"
+  echo "📄 Copied README.md from project root to $OUT_ROOT/"
+else
+  echo "ℹ️ No README.md found in project root: $PROJECT_ROOT"
+fi
+
 # Set PKGDEST safely (avoid command substitution in assignment)
 if ! cd "$OUT_DIR"; then
   echo "✖ Failed to access output directory: $OUT_DIR" >&2
@@ -134,12 +144,47 @@ fi
 echo "Adding ${#pkgs[@]} packages to repository..."
 repo-add -R "${REPO_NAME}.db.tar.${DB_EXT}" "${pkgs[@]}"    # -R prunes old entries
 
+# Clean up repo-add backup files
+rm -f "${REPO_NAME}.db.tar.${DB_EXT}.old" "${REPO_NAME}.files.tar.${DB_EXT}.old"
+
+# Replace symlinks with actual files for static hosting (GitHub Pages doesn't follow symlinks)
+rm -f "${REPO_NAME}.db" "${REPO_NAME}.files"  # Remove symlinks first
+cp "${REPO_NAME}.db.tar.${DB_EXT}" "${REPO_NAME}.db"
+cp "${REPO_NAME}.files.tar.${DB_EXT}" "${REPO_NAME}.files"
+
+# Optionally clean old package versions
+if [[ "$CLEAN_REPO" == "1" ]]; then
+  echo "🧹 Cleaning old package versions..."
+  # Simple approach: remove all .pkg.tar.* files except the ones we just built
+  for existing_pkg in ./*.pkg.tar.*; do
+    [[ -f "$existing_pkg" ]] || continue
+    # Skip if this package is in our current build list
+    skip=false
+    for current_pkg in "${pkgs[@]}"; do
+      if [[ "$(basename "$existing_pkg")" == "$(basename "$current_pkg")" ]]; then
+        skip=true
+        break
+      fi
+    done
+    
+    if [[ "$skip" == false ]]; then
+      rm -f "$existing_pkg"
+      echo "  Removed: $(basename "$existing_pkg")"
+    fi
+  done
+fi
+
 # ---------- Summary ----------
 echo
 echo "🎉 Build Summary:"
 echo "  Built: $BUILT packages"
 echo "  Failed: $FAILED packages" 
 echo "  Total packages in repo: ${#pkgs[@]}"
+if [[ "$CLEAN_REPO" == "1" ]]; then
+  echo "  🧹 Old package versions removed"
+else
+  echo "  📦 Old package versions kept (set CLEAN_REPO=1 to remove)"
+fi
 echo
 echo "Repository ready at: $OUT_DIR"
 echo
