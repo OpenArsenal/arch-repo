@@ -1,0 +1,55 @@
+name: Deploy Arch Repository to GitHub Pages
+
+on:
+  push:
+    branches: [ main ]
+    paths: [ 'docs/**' ]  # Only deploy when docs/ changes
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🛎️ Checkout with LFS
+        uses: actions/checkout@v4
+        with:
+          lfs: true  # This fetches LFS files as actual binary files
+          
+      - name: 📄 Prepare site structure
+        run: |
+          mkdir -p _site
+          
+          # Copy repository files (now actual binaries, not LFS pointers)
+          cp -r docs/* _site/
+          
+          # Copy README to root for GitHub Pages
+          if [ -f README.md ]; then
+            cp README.md _site/
+          fi
+          
+          # Verify files are actual binaries, not LFS pointers
+          echo "Checking file types:"
+          file _site/x86_64/*.db || true
+          file _site/x86_64/*.pkg.tar.* | head -3 || true
+          
+      - name: 📤 Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '_site'
+          
+      - name: 🚀 Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
