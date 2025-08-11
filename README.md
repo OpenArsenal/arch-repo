@@ -21,6 +21,7 @@ Add the following to `/etc/pacman.conf`:
 
 ```ini
 [arch-repo]
+SigLevel = Never
 Server = https://openarsenal.github.io/arch-repo/$arch
 ```
 

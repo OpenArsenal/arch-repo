@@ -185,4 +185,5 @@ REPO_ROOT="."
 if GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null); then
   REPO_ROOT="${GIT_ROOT##*/}"  # basename equivalent using parameter expansion
 fi
+echo "SigLevel = Never"
 echo "Server = https://openarsenal.github.io/$REPO_ROOT/\$arch"
